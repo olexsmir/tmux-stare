@@ -1,0 +1,53 @@
+tmux-stare
+----------
+
+stare (Ukrainian /stɐˈrɛ/ for "something old") - yet another session manager for tmux.
+
+This plugin was heavily inspired by tmux-continuum and tmux-resurrect, but
+I didn't like that they loaded all previous sessions. I wanted a way to
+load sessions selectively, so I made this plugin.
+
+FEATURES
+- Automatic saving of sessions
+- Selective session recerrect
+- Picker for interacting with your sessions
+
+INSTALLATION
+
+    # with tpm
+    set -g @plugin 'olexsmir/tmux-stare'
+    set -g @stare-pick 'o'
+
+REQUIREMENTS
+- tmux (tested on 3.6a)
+- fzf (tested on 0.67.0)
+
+OPTIONS
+
+    # Bind for opening picker to select and restore sessions.
+    # Default: '' (not set)
+    set -g @stare-pick 'o'
+
+    # Bind for manually triggering save of all sessions.
+    # Default: 'C-s'
+    set -g @stare-save 'C-s'
+
+    # Auto-save interval in minutes. Set to '0' to disable.
+    # Default: '10'
+    set -g @stare-interval '10'
+
+    # Directory where session data live.
+    # Default: '$HOME/.local/share/tmux/stare/'
+    set -g @stare-dir '$HOME/.local/share/tmux/stare/'
+
+FUTURE
+
+    Things I might add in the future.
+
+    - Start up action (automatically open picker/restore last session)
+    - Resurrect of vim with ':mksession'
+    - Keep content of panes
+
+LICENSE
+
+tmux-stare is licensed under MIT.

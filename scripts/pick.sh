@@ -41,10 +41,10 @@ strip_session_name() {
 
 pick() {
   local selected=$(get_all_sessions "$(get_current_session_name)" | fzf \
-    --footer="C-x: unload/kill | C-r: rename | C-n: new" \
+    --footer="C-x: unload/kill | C-r: rename | C-o: new" \
     --bind "ctrl-x:execute($0 unload {})+reload($0 list)" \
     --bind "ctrl-r:execute($0 rename {})+reload($0 list)" \
-    --bind "ctrl-n:execute($0 new)+reload($0 list)" \
+    --bind "ctrl-o:execute($0 new)+reload($0 list)" \
     --bind "enter:accept")
 
   [[ -z "$selected" ]] && return 0

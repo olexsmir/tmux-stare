@@ -77,6 +77,12 @@ save_session() {
   link_last "$last_file" "$save_dir"
 }
 
+save_all_sessions() {
+  tmux list-sessions -F "#{session_name}" | while read -r session; do
+    save_session "$session"
+  done
+}
+
 # === restore
 restore_session_from_file() {
   local session_file="$1"

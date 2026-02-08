@@ -4,7 +4,26 @@ source "$CURRENT_DIR/helpers.sh"
 
 declare S=$'\t'
 
-# === common
+rename_session() {
+  local old="$1"
+  local new="$2"
+  local dir="$(get_opt_dir)"
+
+  [[ -z "$new" || "$old" == "$new" ]] && return 1
+  [[ -e "${dir}/${new}_last" ]] && return 1
+
+  tmux has-session -t "$new" 2>/dev/null && return 1
+  tmux rename-session -t "$old" "$new" 2>/dev/null
+
+  local old_last="${dir}/${old}_last"
+  [[ -L "$old_last" ]] && {
+    local actual="$(readlink "$old_last")"
+    local new_actual="${dir}/${new}_$(basename "$actual" | cut -d_ -f2-)"
+    mv "$actual" "$new_actual"
+    ln -sf "$new_actual" "${dir}/${new}_last"
+    rm "$old_last"
+  }
+}
 
 # === save
 save_cwd() {
@@ -81,6 +100,12 @@ save_all_sessions() {
   tmux list-sessions -F "#{session_name}" | while read -r session; do
     save_session "$session"
   done
+}
+
+unload_session() {
+  local session_name="$1"
+  save_session "$session_name"
+  tmux kill-session -t "$session_name"
 }
 
 # === restore

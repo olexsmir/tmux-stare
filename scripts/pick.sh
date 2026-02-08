@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$CURRENT_DIR/helpers.sh"
+source "$CURRENT_DIR/sessions.sh"
 
 get_all_sessions() {
   local current_session="$1"
@@ -44,7 +45,7 @@ pick() {
   if tmux has-session -t "$session_name" 2>/dev/null; then
     tmux switch-client -t "$session_name"
   else
-    exec "$CURRENT_DIR/restore.sh" "$session_name"
+    restore_session "$session_name"
   fi
 }
 

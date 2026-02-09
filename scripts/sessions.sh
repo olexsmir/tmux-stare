@@ -109,6 +109,11 @@ save_all_sessions() {
   tmux list-sessions -F "#{session_name}" | while read -r session; do
     save_session "$session"
   done
+
+  local current_session="$(get_current_session_name)"
+  if [[ -n "$current_session" ]]; then
+    link_last "$(get_opt_dir)/${current_session}_last" "$(get_opt_dir)"
+  fi
 }
 
 unload_session() {

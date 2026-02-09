@@ -4,6 +4,15 @@ source "$CURRENT_DIR/helpers.sh"
 
 declare S=$'\t'
 
+# === common
+get_current_session_name() {
+  if [ "$(tmux display-message -p "#{session_grouped}")" = 0 ]; then
+    tmux display-message -p "#{session_name}" 2>/dev/null || true
+  else
+    tmux display-message -p "#{session_group}" 2>/dev/null || true
+  fi
+}
+
 rename_session() {
   local old="$1"
   local new="$2"

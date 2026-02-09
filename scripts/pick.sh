@@ -4,7 +4,7 @@ source "$CURRENT_DIR/helpers.sh"
 source "$CURRENT_DIR/sessions.sh"
 
 get_all_sessions() {
-  local current_session="$1"
+  local current_session="$(get_current_session_name)"
   local save_dir="$(get_opt_dir)"
   local -A seen
 
@@ -40,7 +40,7 @@ strip_session_name() {
 }
 
 pick() {
-  local selected=$(get_all_sessions "$(get_current_session_name)" | fzf \
+  local selected=$(get_all_sessions | fzf \
     --footer="C-x: unload/kill | C-r: rename | C-o: new" \
     --bind "ctrl-x:execute($0 unload {})+reload($0 list)" \
     --bind "ctrl-r:execute($0 rename {})+reload($0 list)" \
@@ -73,7 +73,7 @@ confirm_delete() {
   local session_file="$save_dir/${session_name}_last"
 
   local result
-  result=$(printf "Delete\nCancel" | fzf --header="Delete saved session '$session_name'?")
+  result=$(printf "Cancel\nDelete" | fzf --header="Delete saved session '$session_name'?")
   if [[ "$result" == "Delete" ]]; then
     rm -f "$session_file"
   fi
@@ -105,7 +105,7 @@ main() {
   unload) unload_or_kill "$2" ;;
   rename) rename "$2" ;;
   new) new_session ;;
-  list) get_all_sessions "$(get_current_session_name)" ;;
+  list) get_all_sessions ;;
   esac
 }
 main "$@"

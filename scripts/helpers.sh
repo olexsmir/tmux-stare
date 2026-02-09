@@ -33,7 +33,7 @@ get_opt_dir() {
 }
 
 # === spiner
-# TODO: use one of those  briael fonts
+# TODO: use one of those briael fonts
 new_spinner() {
   local current=0
   local -r chars="/-\|"
@@ -52,12 +52,4 @@ start_spinner() {
 stop_spinner() {
   kill "$SPINNER_PID"
   tmux display-message "$1"
-}
-
-get_current_session_name() {
-  if [ "$(tmux display-message -p "#{session_grouped}")" = 0 ]; then
-    tmux display-message -p "#{session_name}" 2>/dev/null || true
-  else
-    tmux display-message -p "#{session_group}" 2>/dev/null || true
-  fi
 }

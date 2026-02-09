@@ -18,9 +18,12 @@ set_tmux_option() {
 get_time() { date +"%Y%m%dT%H%M%S"; }
 
 # === options
-get_opt_interval() { get_tmux_option "@stare-interval" "10"; }
+get_opt_interval() { get_tmux_option "@stare-interval" "15"; }
+get_opt_start() { get_tmux_option "@stare-start" ""; }
 get_opt_last() { get_tmux_option "@stare-last" "0"; }
 set_opt_last() { set_tmux_option "@stare-last" "$1"; }
+get_opt_initialized() { get_tmux_option "@stare-initialized" "0"; }
+set_opt_initialized() { get_tmux_option "@stare-initialized" "$1"; }
 get_opt_save() { get_tmux_option "@stare-save" "C-s"; }
 get_opt_pick() { get_tmux_option "@stare-pick" ""; }
 get_opt_dir() {

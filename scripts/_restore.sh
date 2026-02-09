@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$CURRENT_DIR/helpers.sh"
 source "$CURRENT_DIR/sessions.sh"
 
-start_spinner "Saving sessions"
-save_all_sessions
-stop_spinner "Sassions saved"
+restore_last

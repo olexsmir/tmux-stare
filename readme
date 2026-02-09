@@ -32,6 +32,10 @@ OPTIONS
     # Default: 'C-s'
     set -g @stare-save 'C-s'
 
+    # Start action. 'pick' opens picker on start, 'last' restores last session
+    # Default: ''
+    set -g @stare-start ''
+
     # Auto-save interval in minutes. Set to '0' to disable.
     # Default: '10'
     set -g @stare-interval '10'
@@ -44,7 +48,6 @@ FUTURE
 
     Things I might add in the future.
 
-    - Start up action (automatically open picker/restore last session)
     - Resurrect of vim with ':mksession'
     - Keep content of panes
 

@@ -15,11 +15,20 @@ add_save_interpolation() {
 
 main() {
   local pick_key="$(get_opt_pick)"
-  [[ -n "$pick_key" ]] && tmux bind-key "$pick_key" run-shell \
-    "tmux display-popup -E -w 25% -h 40% '$CURRENT_DIR/scripts/pick.sh'"
+  [[ -n "$pick_key" ]] && tmux bind-key "$pick_key" run-shell "$CURRENT_DIR/scripts/_pick.sh"
 
   local save_key="$(get_opt_save)"
   [[ -n "$save_key" ]] && tmux bind-key "$save_key" run-shell "$CURRENT_DIR/scripts/_save.sh"
+
+  local start_action="$(get_opt_start)"
+  local is_initialized="$(get_opt_initialized)"
+  if [[ "$is_initialized" =~ "1" ]]; then
+    if [[ "$start_action" == "last" ]]; then
+      tmux run-shell -b "sleep 0.1 && '$CURRENT_DIR/scripts/_restore.sh'"
+    elif [[ "$start_action" == "pick" ]]; then
+      tmux run-shell -b "sleep 0.1 && '$CURRENT_DIR/scripts/_pick.sh'"
+    fi
+  fi
 
   add_save_interpolation
 }

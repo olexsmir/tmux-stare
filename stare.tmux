@@ -21,13 +21,14 @@ main() {
   [[ -n "$save_key" ]] && tmux bind-key "$save_key" run-shell "$CURRENT_DIR/scripts/_save.sh"
 
   local start_action="$(get_opt_start)"
-  local is_initialized="$(get_opt_initialized)"
-  if [[ "$is_initialized" =~ "1" ]]; then
+  if [[ "$(get_opt_initialized)" == "0" ]]; then
     if [[ "$start_action" == "last" ]]; then
       tmux run-shell -b "sleep 0.1 && '$CURRENT_DIR/scripts/_restore.sh'"
     elif [[ "$start_action" == "pick" ]]; then
       tmux run-shell -b "sleep 0.1 && '$CURRENT_DIR/scripts/_pick.sh'"
     fi
+
+    set_opt_initialized "1"
   fi
 
   add_save_interpolation

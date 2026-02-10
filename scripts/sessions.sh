@@ -49,26 +49,88 @@ save_windows() {
 
 }
 
+get_pane_child_pids() {
+  local pane_pid="$1"
+  ps -ao ppid=,pid= | awk -v pane_pid="$pane_pid" '$1 == pane_pid { print $2 }'
+}
+
+format_process_command() {
+  local pid="$1"
+  [[ -r "/proc/${pid}/cmdline" ]] || return 1
+  xargs -0 bash -c 'printf "%q " "$0" "$@"' <"/proc/${pid}/cmdline" 2>/dev/null | sed 's/[[:space:]]*$//'
+}
+
+build_command_from_pids() {
+  local pids="$1"
+  local pid
+  local formatted
+  local command=""
+  for pid in $pids; do
+    formatted="$(format_process_command "$pid")"
+    [[ -z "$formatted" ]] && continue
+    [[ -n "$command" ]] && command+=" | "
+    command+="$formatted"
+  done
+  printf "%s" "$command"
+}
+
+collect_process_names() {
+  local pids="$1"
+  local pid
+  local first_arg
+  local name
+  for pid in $pids; do
+    [[ -r "/proc/${pid}/cmdline" ]] || continue
+    first_arg="$(tr '\0' '\n' <"/proc/${pid}/cmdline" 2>/dev/null | head -n1)"
+    [[ -z "$first_arg" ]] && continue
+    name="$(basename "$first_arg")"
+    [[ -n "$name" ]] && printf "%s\n" "$name"
+  done | sort -u
+}
+
+strip_prompt_prefix() {
+  local line="$1"
+  if [[ "$line" =~ [\$\#\%\>][[:space:]]+.+$ ]]; then
+    sed -E 's/^.*[#$%>][[:space:]]+//' <<<"$line"
+  fi
+}
+
+find_command_from_pane_history() {
+  local pane_target="$1"
+  local process_names="$2"
+  local line
+  local candidate
+  local name
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    candidate="$(strip_prompt_prefix "$line")"
+    [[ -z "$candidate" ]] && continue
+    while IFS= read -r name; do
+      [[ -z "$name" ]] && continue
+      if [[ "$candidate" == *"$name"* ]]; then
+        printf "%s" "$candidate"
+        return 0
+      fi
+    done <<<"$process_names"
+  done < <(tmux capture-pane -pJ -S -200 -t "$pane_target" 2>/dev/null | tac)
+}
+
 save_panes() {
   local session_name="$1"
   local save_file="$2"
   local format="pane$S#{pane_index}$S#{pane_current_path}$S#{pane_active}$S#{window_index}$S#{pane_pid}"
   tmux list-panes -s -t "$session_name" -F "$format" |
     while IFS="$S" read -r line; do
-      pids=$(ps -ao "ppid,pid" |
-        sed "s/^ *//" |
-        grep "^$(cut -f6 <<<"$line")" |
-        rev |
-        cut -d' ' -f1 |
-        rev)
+      IFS="$S" read -r _ pane_index _ _ window_index pane_pid <<<"$line"
+      pids="$(get_pane_child_pids "$pane_pid")"
+      command="$(build_command_from_pids "$pids")"
 
-      command="$(
-        for pid in $pids; do
-          while read -r arg; do
-            echo -n "'$arg' "
-          done <<<"$(xargs -0L1 </proc/"$pid"/cmdline 2>/dev/null)"
-        done
-      )"
+      if [[ -n "$command" ]]; then
+        process_names="$(collect_process_names "$pids")"
+        pane_target="${session_name}:${window_index}.${pane_index}"
+        pane_command="$(find_command_from_pane_history "$pane_target" "$process_names")"
+        [[ -n "$pane_command" ]] && command="$pane_command"
+      fi
 
       awk -v command="$command" \
         'BEGIN {FS=OFS="\t"} {$6=command; print}' \

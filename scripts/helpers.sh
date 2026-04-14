@@ -51,5 +51,5 @@ start_spinner() {
 
 stop_spinner() {
   kill "$SPINNER_PID"
-  tmux display-message "$1"
+  tmux display-message " $1"
 }

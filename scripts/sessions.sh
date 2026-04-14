@@ -351,7 +351,8 @@ restore_session_from_file() {
 
   start_spinner "Restoring session $session_name"
 
-  local session_path="$(head -n1 | cut -d"$SEPARATOR" -f2)"
+  local session_path="$(head -n1)"
+  [[ -n "$session_path" ]] || session_path="$HOME"
   tmux new-session -ds "$session_name" -c "$session_path"
 
   declare -A window_layouts

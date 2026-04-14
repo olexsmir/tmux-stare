@@ -73,7 +73,7 @@ confirm_delete() {
   local session_file="$save_dir/${session_name}_last"
 
   local result
-  result=$(printf "Cancel\nDelete" | fzf --header="Delete saved session '$session_name'?")
+  result=$(printf "Delete\nCancel" | fzf --header="Delete saved session '$session_name'?")
   if [[ "$result" == "Delete" ]]; then
     rm -f "$session_file"
   fi

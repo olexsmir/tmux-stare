@@ -13,128 +13,25 @@ get_current_session_name() {
   fi
 }
 
-session_id_map_file() { echo "$(get_opt_dir)/.session_ids" }
-sync_session_id_map() {
-  local map_file="$(session_id_map_file)"
-  tmux list-sessions -F "#{session_id}${S}#{session_name}" >"$map_file"
-}
-
-get_session_id_by_name() {
-  local session_name="$1"
-  tmux display-message -p -t "$session_name" "#{session_id}" 2>/dev/null
-}
-
-get_session_name_by_id() {
-  local session_id="$1"
-  local map_file="$(session_id_map_file)"
-  [[ -f "$map_file" ]] || return 1
-  awk -F"$S" -v session_id="$session_id" '$1 == session_id { print $2; exit }' "$map_file"
-}
-
-upsert_session_id_entry() {
-  local session_id="$1"
-  local session_name="$2"
-  local map_file="$(session_id_map_file)"
-  local tmp_file="${map_file}.tmp"
-
-  [[ -z "$session_id" || -z "$session_name" ]] && return 1
-  [[ -f "$map_file" ]] || : >"$map_file"
-
-  awk -F"$S" -v OFS="$S" -v session_id="$session_id" -v session_name="$session_name" '
-    $1 == session_id {
-      $2 = session_name
-      found = 1
-    }
-    { print }
-    END {
-      if (!found) print session_id, session_name
-    }
-  ' "$map_file" >"$tmp_file" && mv "$tmp_file" "$map_file"
-}
-
-remember_session_identity() {
-  local session_name="$1"
-  local session_id
-  session_id="$(get_session_id_by_name "$session_name")"
-  [[ -n "$session_id" ]] && upsert_session_id_entry "$session_id" "$session_name"
-}
-
-rename_session_files() {
-  local old="$1"
-  local new="$2"
-  local dir="$(get_opt_dir)"
-  local old_last="${dir}/${old}_last"
-  local new_last="${dir}/${new}_last"
-  local global_last="${dir}/last"
-
-  [[ -z "$old" || -z "$new" || "$old" == "$new" ]] && return 1
-  [[ -e "$old_last" ]] || return 0
-  [[ -e "$new_last" ]] && return 1
-
-  if [[ -L "$old_last" ]]; then
-    local actual="$(readlink "$old_last")"
-    local actual_name
-    local new_actual
-    [[ "$actual" != /* ]] && actual="${dir}/${actual}"
-
-    actual_name="$(basename "$actual")"
-    if [[ "$actual_name" == "${old}_"* && -e "$actual" ]]; then
-      new_actual="${dir}/${new}_${actual_name#${old}_}"
-      mv "$actual" "$new_actual"
-      ln -sf "$new_actual" "$new_last"
-      rm -f "$old_last"
-    else
-      mv "$old_last" "$new_last"
-    fi
-  else
-    mv "$old_last" "$new_last"
-  fi
-
-  if [[ -L "$global_last" ]]; then
-    local global_target="$(readlink "$global_last")"
-    local global_target_name="$(basename "$global_target")"
-    if [[ "$global_target_name" == "${old}_last" ]]; then
-      ln -sf "$new_last" "$global_last"
-    fi
-  fi
-}
-
-apply_session_rename() {
-  local session_id="$1"
-  local new_name="$2"
-  local old_name="${3:-}"
-
-  [[ -z "$session_id" || -z "$new_name" ]] && return 1
-  [[ -n "$old_name" ]] || old_name="$(get_session_name_by_id "$session_id" || true)"
-
-  if [[ -n "$old_name" && "$old_name" != "$new_name" ]]; then
-    rename_session_files "$old_name" "$new_name"
-  fi
-
-  upsert_session_id_entry "$session_id" "$new_name"
-}
-
 rename_session() {
   local old="$1"
   local new="$2"
-  local session_id
+  local dir="$(get_opt_dir)"
 
-  [[ -z "$new" || "$old" == "$new" ]] && return 1
+  [[ -z "$old" || -z "$new" || "$old" == "$new" ]] && return 1
   [[ -e "$(get_opt_dir)/${new}_last" ]] && return 1
 
   tmux has-session -t "$new" 2>/dev/null && return 1
-  session_id="$(get_session_id_by_name "$old")"
-  [[ -n "$session_id" ]] || return 1
-  tmux rename-session -t "$old" "$new" 2>/dev/null || return 1
-  apply_session_rename "$session_id" "$new" "$old"
-}
+  tmux rename-session -t "$old" "$new" 2>/dev/null
 
-handle_session_renamed_hook() {
-  local session_id="$1"
-  local new_name="$2"
-
-  [[ -z "$session_id" || -z "$new_name" ]] && return 1
-  apply_session_rename "$session_id" "$new_name"
+  local old_last="${dir}/${old}_last"
+  [[ -L "$old_last" ]] && {
+    local actual="$(readlink "$old_last")"
+    local new_actual="${dir}/${new}_$(basename "$actual" | cut -d_ -f2-)"
+    mv "$actual" "$new_actual"
+    ln -sf "$new_actual" "${dir}/${new}_last"
+    rm "$old_last"
+  }
 }
 
 # === save
@@ -152,70 +49,89 @@ save_windows() {
 
 }
 
-get_pane_child_pids() {
-  local pane_pid="$1"
-  ps -ao ppid=,pid= | awk -v pane_pid="$pane_pid" '$1 == pane_pid { print $2 }'
-}
-
 format_process_command() {
   local pid="$1"
   [[ -r "/proc/${pid}/cmdline" ]] || return 1
   xargs -0 bash -c 'printf "%q " "$0" "$@"' <"/proc/${pid}/cmdline" 2>/dev/null | sed 's/[[:space:]]*$//'
 }
 
-build_command_from_pids() {
-  local pids="$1"
-  local pid
-  local formatted
-  local command=""
-  for pid in $pids; do
-    formatted="$(format_process_command "$pid")"
-    [[ -z "$formatted" ]] && continue
-    [[ -n "$command" ]] && command+=" | "
-    command+="$formatted"
+get_descendant_pids() {
+  local root_pid="$1"
+  local proc_table
+  local -A seen
+  local frontier
+
+  [[ -n "$root_pid" ]] || return 1
+  proc_table="$(ps -ao ppid=,pid= --sort=pid)"
+  frontier="$root_pid"
+  seen["$root_pid"]="1"
+
+  while [[ -n "$frontier" ]]; do
+    local next_frontier=""
+    local ppid
+    local pid
+
+    while read -r ppid pid; do
+      local parent
+      for parent in $frontier; do
+        [[ "$ppid" == "$parent" ]] || continue
+        [[ -n "${seen[$pid]:-}" ]] && continue
+        seen["$pid"]="1"
+        printf "%s\n" "$pid"
+        next_frontier+=" $pid"
+      done
+    done <<<"$proc_table"
+
+    frontier="${next_frontier# }"
   done
-  printf "%s" "$command"
 }
 
-collect_process_names() {
-  local pids="$1"
-  local pid
+get_process_name() {
+  local pid="$1"
   local first_arg
-  local name
-  for pid in $pids; do
-    [[ -r "/proc/${pid}/cmdline" ]] || continue
-    first_arg="$(tr '\0' '\n' <"/proc/${pid}/cmdline" 2>/dev/null | head -n1)"
-    [[ -z "$first_arg" ]] && continue
-    name="$(basename "$first_arg")"
-    [[ -n "$name" ]] && printf "%s\n" "$name"
-  done | sort -u
+  [[ -r "/proc/${pid}/cmdline" ]] || return 1
+  first_arg="$(tr '\0' '\n' <"/proc/${pid}/cmdline" 2>/dev/null | head -n1)"
+  [[ -n "$first_arg" ]] || return 1
+  basename "$first_arg"
 }
 
-strip_prompt_prefix() {
-  local line="$1"
-  if [[ "$line" =~ [\$\#\%\>][[:space:]]+.+$ ]]; then
-    sed -E 's/^.*[#$%>][[:space:]]+//' <<<"$line"
+select_active_command_pid() {
+  local pane_pid="$1"
+  local pane_target="$2"
+  local pane_current_command
+  local pids
+  local pid
+  local name
+  local matching_pid=""
+  local fallback_pid=""
+  local descendant_count=0
+
+  pane_current_command="$(tmux display-message -p -t "$pane_target" "#{pane_current_command}" 2>/dev/null)"
+  pids="$(get_descendant_pids "$pane_pid")"
+
+  for pid in $pids; do
+    descendant_count=$((descendant_count + 1))
+    fallback_pid="$pid"
+    [[ -n "$pane_current_command" ]] || continue
+    name="$(get_process_name "$pid")" || continue
+    [[ "$name" == "$pane_current_command" ]] && matching_pid="$pid"
+  done
+
+  if [[ -n "$matching_pid" ]]; then
+    printf "%s" "$matching_pid"
+  elif [[ "$descendant_count" == "1" ]]; then
+    printf "%s" "$fallback_pid"
   fi
 }
 
-find_command_from_pane_history() {
-  local pane_target="$1"
-  local process_names="$2"
-  local line
-  local candidate
-  local name
-  while IFS= read -r line; do
-    [[ -z "$line" ]] && continue
-    candidate="$(strip_prompt_prefix "$line")"
-    [[ -z "$candidate" ]] && continue
-    while IFS= read -r name; do
-      [[ -z "$name" ]] && continue
-      if [[ "$candidate" == *"$name"* ]]; then
-        printf "%s" "$candidate"
-        return 0
-      fi
-    done <<<"$process_names"
-  done < <(tmux capture-pane -pJ -S -200 -t "$pane_target" 2>/dev/null | tac)
+capture_running_command() {
+  local pane_pid="$1"
+  local pane_target="$2"
+  local command_pid
+
+  command_pid="$(select_active_command_pid "$pane_pid" "$pane_target")"
+  [[ -n "$command_pid" ]] || return 1
+  format_process_command "$command_pid"
 }
 
 save_panes() {
@@ -224,16 +140,11 @@ save_panes() {
   local format="pane$S#{pane_index}$S#{pane_current_path}$S#{pane_active}$S#{window_index}$S#{pane_pid}"
   tmux list-panes -s -t "$session_name" -F "$format" |
     while IFS="$S" read -r line; do
+      local pane_target
+      local command
       IFS="$S" read -r _ pane_index _ _ window_index pane_pid <<<"$line"
-      pids="$(get_pane_child_pids "$pane_pid")"
-      command="$(build_command_from_pids "$pids")"
-
-      if [[ -n "$command" ]]; then
-        process_names="$(collect_process_names "$pids")"
-        pane_target="${session_name}:${window_index}.${pane_index}"
-        pane_command="$(find_command_from_pane_history "$pane_target" "$process_names")"
-        [[ -n "$pane_command" ]] && command="$pane_command"
-      fi
+      pane_target="${session_name}:${window_index}.${pane_index}"
+      command="$(capture_running_command "$pane_pid" "$pane_target")"
 
       awk -v command="$command" \
         'BEGIN {FS=OFS="\t"} {$6=command; print}' \
@@ -268,7 +179,6 @@ save_session() {
   save_panes "$session_name" "$save_file"
   link_session_last "$save_file" "$last_file"
   link_last "$last_file" "$save_dir"
-  remember_session_identity "$session_name"
 }
 
 save_all_sessions() {

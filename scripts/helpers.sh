@@ -26,6 +26,7 @@ get_opt_initialized() { get_tmux_option "@stare-initialized" "0"; }
 set_opt_initialized() { get_tmux_option "@stare-initialized" "$1"; }
 get_opt_save() { get_tmux_option "@stare-save" "C-s"; }
 get_opt_pick() { get_tmux_option "@stare-pick" ""; }
+get_opt_processes() { get_tmux_option "@stare-processes" "vi vim nvim man less more tial htop btop claude opencode copilot pi"; }
 get_opt_dir() {
   local dir="$(get_tmux_option "@stare-dir" "${HOME}/.local/share/tmux/stare" | sed "s,\$HOME,$HOME,g; s,\~,$HOME,g")"
   mkdir -p "$dir"

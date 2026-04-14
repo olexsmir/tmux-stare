@@ -185,6 +185,61 @@ unload_session() {
 }
 
 # === restore
+restore_pane_processes_enabled() {
+  local processes="$(get_opt_processes)"
+  [[ "$processes" != "false" ]]
+}
+
+restore_all_processes() {
+  local processes="$(get_opt_processes)"
+  [[ "$processes" == ":all:" ]]
+}
+
+restore_list() {
+  get_opt_processes
+}
+
+get_proc_match_element() {
+  local proc="$1"
+  printf "%s" "${proc%%->*}"
+}
+
+proc_matches_command() {
+  local command="$1"
+  local match="$2"
+  if [[ "${match:0:1}" == "~" ]]; then
+    local relaxed="${match#~}"
+    [[ "$command" == *"$relaxed"* ]]
+  else
+    [[ "$command" == "$match" || "$command" == "$match "* ]]
+  fi
+}
+
+command_on_restore_list() {
+  local command="$1"
+  local proc
+  local match
+  local restore_list_value
+  restore_list_value="$(restore_list)"
+  # shellcheck disable=SC2086
+  eval "set -- $restore_list_value"
+  for proc in "$@"; do
+    match="$(get_proc_match_element "$proc")"
+    if proc_matches_command "$command" "$match"; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+should_restore_command() {
+  local command="$1"
+  [[ -z "$command" ]] && return 1
+  restore_pane_processes_enabled || return 1
+  restore_all_processes && return 0
+  command_on_restore_list "$command"
+}
+
 restore_session_from_file() {
   local session_file="$1"
   local session_name=$(basename "$session_file" | sed 's/_last$//')
@@ -219,7 +274,7 @@ restore_session_from_file() {
       if [[ "$pane_active" == "1" ]]; then
         tmux select-pane -t "$session_name:$window_index.$pane_index"
       fi
-      if [[ -n "$command" ]]; then
+      if should_restore_command "$command"; then
         tmux send-keys -t "$session_name:$window_index.$pane_index" "$command" Enter
       fi
       ;;

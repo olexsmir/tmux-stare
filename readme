@@ -44,6 +44,12 @@ OPTIONS
     # Default: '$HOME/.local/share/tmux/stare/'
     set -g @stare-dir '$HOME/.local/share/tmux/stare/'
 
+    # Space-separated list of processes allowed to be resurrected.
+    # - set to 'false' to disable command resurrection
+    # - set to ':all:' to resurrect everything
+    # Default: 'vi vim nvim man less more tial htop btop claude opencode copilot pi'
+    set -g @stare-processes 'emacs man'
+
 FUTURE
 
     Things I might add in the future.

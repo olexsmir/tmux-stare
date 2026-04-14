@@ -31,6 +31,10 @@ main() {
     set_opt_initialized "1"
   fi
 
+  # rename hook
+  tmux set-hook -g session-renamed "run-shell \"bash '$CURRENT_DIR/scripts/_session_renamed.sh' #{q:hook_session} #{q:hook_session_name}\""
+  tmux run-shell "bash '$CURRENT_DIR/scripts/_session_renamed.sh' sync"
+
   add_save_interpolation
 }
 main

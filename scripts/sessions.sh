@@ -13,25 +13,128 @@ get_current_session_name() {
   fi
 }
 
-rename_session() {
+session_id_map_file() { echo "$(get_opt_dir)/.session_ids" }
+sync_session_id_map() {
+  local map_file="$(session_id_map_file)"
+  tmux list-sessions -F "#{session_id}${S}#{session_name}" >"$map_file"
+}
+
+get_session_id_by_name() {
+  local session_name="$1"
+  tmux display-message -p -t "$session_name" "#{session_id}" 2>/dev/null
+}
+
+get_session_name_by_id() {
+  local session_id="$1"
+  local map_file="$(session_id_map_file)"
+  [[ -f "$map_file" ]] || return 1
+  awk -F"$S" -v session_id="$session_id" '$1 == session_id { print $2; exit }' "$map_file"
+}
+
+upsert_session_id_entry() {
+  local session_id="$1"
+  local session_name="$2"
+  local map_file="$(session_id_map_file)"
+  local tmp_file="${map_file}.tmp"
+
+  [[ -z "$session_id" || -z "$session_name" ]] && return 1
+  [[ -f "$map_file" ]] || : >"$map_file"
+
+  awk -F"$S" -v OFS="$S" -v session_id="$session_id" -v session_name="$session_name" '
+    $1 == session_id {
+      $2 = session_name
+      found = 1
+    }
+    { print }
+    END {
+      if (!found) print session_id, session_name
+    }
+  ' "$map_file" >"$tmp_file" && mv "$tmp_file" "$map_file"
+}
+
+remember_session_identity() {
+  local session_name="$1"
+  local session_id
+  session_id="$(get_session_id_by_name "$session_name")"
+  [[ -n "$session_id" ]] && upsert_session_id_entry "$session_id" "$session_name"
+}
+
+rename_session_files() {
   local old="$1"
   local new="$2"
   local dir="$(get_opt_dir)"
+  local old_last="${dir}/${old}_last"
+  local new_last="${dir}/${new}_last"
+  local global_last="${dir}/last"
+
+  [[ -z "$old" || -z "$new" || "$old" == "$new" ]] && return 1
+  [[ -e "$old_last" ]] || return 0
+  [[ -e "$new_last" ]] && return 1
+
+  if [[ -L "$old_last" ]]; then
+    local actual="$(readlink "$old_last")"
+    local actual_name
+    local new_actual
+    [[ "$actual" != /* ]] && actual="${dir}/${actual}"
+
+    actual_name="$(basename "$actual")"
+    if [[ "$actual_name" == "${old}_"* && -e "$actual" ]]; then
+      new_actual="${dir}/${new}_${actual_name#${old}_}"
+      mv "$actual" "$new_actual"
+      ln -sf "$new_actual" "$new_last"
+      rm -f "$old_last"
+    else
+      mv "$old_last" "$new_last"
+    fi
+  else
+    mv "$old_last" "$new_last"
+  fi
+
+  if [[ -L "$global_last" ]]; then
+    local global_target="$(readlink "$global_last")"
+    local global_target_name="$(basename "$global_target")"
+    if [[ "$global_target_name" == "${old}_last" ]]; then
+      ln -sf "$new_last" "$global_last"
+    fi
+  fi
+}
+
+apply_session_rename() {
+  local session_id="$1"
+  local new_name="$2"
+  local old_name="${3:-}"
+
+  [[ -z "$session_id" || -z "$new_name" ]] && return 1
+  [[ -n "$old_name" ]] || old_name="$(get_session_name_by_id "$session_id" || true)"
+
+  if [[ -n "$old_name" && "$old_name" != "$new_name" ]]; then
+    rename_session_files "$old_name" "$new_name"
+  fi
+
+  upsert_session_id_entry "$session_id" "$new_name"
+}
+
+rename_session() {
+  local old="$1"
+  local new="$2"
+  local session_id
 
   [[ -z "$new" || "$old" == "$new" ]] && return 1
-  [[ -e "${dir}/${new}_last" ]] && return 1
+  [[ -e "$(get_opt_dir)/${new}_last" ]] && return 1
 
   tmux has-session -t "$new" 2>/dev/null && return 1
-  tmux rename-session -t "$old" "$new" 2>/dev/null
+  session_id="$(get_session_id_by_name "$old")"
+  [[ -n "$session_id" ]] || return 1
+  tmux rename-session -t "$old" "$new" 2>/dev/null || return 1
+  apply_session_rename "$session_id" "$new" "$old"
+}
 
-  local old_last="${dir}/${old}_last"
-  [[ -L "$old_last" ]] && {
-    local actual="$(readlink "$old_last")"
-    local new_actual="${dir}/${new}_$(basename "$actual" | cut -d_ -f2-)"
-    mv "$actual" "$new_actual"
-    ln -sf "$new_actual" "${dir}/${new}_last"
-    rm "$old_last"
-  }
+handle_session_renamed_hook() {
+  local session_id="$1"
+  local new_name="$2"
+
+  [[ -z "$session_id" || -z "$new_name" ]] && return 1
+  apply_session_rename "$session_id" "$new_name"
 }
 
 # === save
@@ -165,6 +268,7 @@ save_session() {
   save_panes "$session_name" "$save_file"
   link_session_last "$save_file" "$last_file"
   link_last "$last_file" "$save_dir"
+  remember_session_identity "$session_name"
 }
 
 save_all_sessions() {

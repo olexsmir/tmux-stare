@@ -27,7 +27,9 @@ rename_session() {
   local old_last="${dir}/${old}_last"
   [[ -L "$old_last" ]] && {
     local actual="$(readlink "$old_last")"
-    local new_actual="${dir}/${new}_$(basename "$actual" | cut -d_ -f2-)"
+    local actual_basename="$(basename "$actual")"
+    local timestamp="${actual_basename: -15}"
+    local new_actual="${dir}/${new}_${timestamp}"
     mv "$actual" "$new_actual"
     ln -sf "$new_actual" "${dir}/${new}_last"
     rm "$old_last"
@@ -149,7 +151,7 @@ save_panes() {
       awk -v command="$command" \
         'BEGIN {FS=OFS="\t"} {$6=command; print}' \
         <<<"$line" >>"$save_file"
-    done
+      done
 }
 
 link_session_last() {
@@ -183,13 +185,13 @@ save_session() {
 
 save_all_sessions() {
   tmux list-sessions -F "#{session_name}" | while read -r session; do
-    save_session "$session"
-  done
+  save_session "$session"
+done
 
-  local current_session="$(get_current_session_name)"
-  if [[ -n "$current_session" ]]; then
-    link_last "$(get_opt_dir)/${current_session}_last" "$(get_opt_dir)"
-  fi
+local current_session="$(get_current_session_name)"
+if [[ -n "$current_session" ]]; then
+  link_last "$(get_opt_dir)/${current_session}_last" "$(get_opt_dir)"
+fi
 }
 
 unload_session() {
@@ -265,36 +267,43 @@ restore_session_from_file() {
   [[ -n "$session_path" ]] || session_path="$HOME"
   tmux new-session -ds "$session_name" -c "$session_path"
 
+  local initial_window_index
+  initial_window_index=$(tmux list-windows -t "$session_name" -F "#{window_index}" | head -1)
+  local initial_window_restored=false
+
   declare -A window_layouts
   declare active_window
   while read -r line; do
     case $line in
-    window*)
-      IFS=$S read -r _ window_index window_name window_layout window_active <<<"$line"
-      window_id="$session_name:$window_index"
-      tmux new-window -k -t "$window_id" -n "$window_name"
-      window_layouts["$window_id"]="$window_layout"
-      if [[ "$window_active" == "1" ]]; then
-        active_window="$window_id"
-      fi
-      ;;
+      window*)
+        IFS=$S read -r _ window_index window_name window_layout window_active <<<"$line"
+        window_id="$session_name:$window_index"
+        tmux new-window -k -t "$window_id" -n "$window_name"
+        [[ "$window_index" == "$initial_window_index" ]] && initial_window_restored=true
+        window_layouts["$window_id"]="$window_layout"
+        if [[ "$window_active" == "1" ]]; then
+          active_window="$window_id"
+        fi
+        ;;
 
-    pane*)
-      IFS=$S read -r _ pane_index pane_current_path pane_active window_index command <<<"$line"
-      if [[ "$pane_index" == "$(get_tmux_option base-index 0)" ]]; then
-        tmux send-keys -t "$session_name:$window_index" "cd \"$pane_current_path\"" Enter "clear" Enter
-      else
-        tmux split-window -d -t "$session_name:$window_index" -c "$pane_current_path"
-      fi
-      if [[ "$pane_active" == "1" ]]; then
-        tmux select-pane -t "$session_name:$window_index.$pane_index"
-      fi
-      if should_restore_command "$command"; then
-        tmux send-keys -t "$session_name:$window_index.$pane_index" "$command" Enter
-      fi
-      ;;
+      pane*)
+        IFS=$S read -r _ pane_index pane_current_path pane_active window_index command <<<"$line"
+        if [[ "$pane_index" == "$(get_tmux_option base-index 0)" ]]; then
+          tmux send-keys -t "$session_name:$window_index" "cd \"$pane_current_path\"" Enter "clear" Enter
+        else
+          tmux split-window -d -t "$session_name:$window_index" -c "$pane_current_path"
+        fi
+        if [[ "$pane_active" == "1" ]]; then
+          tmux select-pane -t "$session_name:$window_index.$pane_index"
+        fi
+        if should_restore_command "$command"; then
+          tmux send-keys -t "$session_name:$window_index.$pane_index" "$command" Enter
+        fi
+        ;;
     esac
   done
+
+  $initial_window_restored || tmux kill-window -t "$session_name:$initial_window_index" 2>/dev/null || true
 
   for window in "${!window_layouts[@]}"; do
     tmux select-layout -t "$window" "${window_layouts[$window]}"

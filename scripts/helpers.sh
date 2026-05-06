@@ -23,7 +23,7 @@ get_opt_start() { get_tmux_option "@stare-start" ""; }
 get_opt_last() { get_tmux_option "@stare-last" "0"; }
 set_opt_last() { set_tmux_option "@stare-last" "$1"; }
 get_opt_initialized() { get_tmux_option "@stare-initialized" "0"; }
-set_opt_initialized() { get_tmux_option "@stare-initialized" "$1"; }
+set_opt_initialized() { set_tmux_option "@stare-initialized" "$1"; }
 get_opt_save() { get_tmux_option "@stare-save" "C-s"; }
 get_opt_pick() { get_tmux_option "@stare-pick" ""; }
 get_opt_processes() { get_tmux_option "@stare-processes" "vi vim nvim man less more tial htop btop claude opencode copilot pi"; }

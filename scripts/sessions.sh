@@ -279,6 +279,7 @@ restore_session_from_file() {
         IFS=$S read -r _ window_index window_name window_layout window_active <<<"$line"
         window_id="$session_name:$window_index"
         tmux new-window -k -t "$window_id" -n "$window_name"
+        tmux set-window-option -t "$window_id" automatic-rename on
         [[ "$window_index" == "$initial_window_index" ]] && initial_window_restored=true
         window_layouts["$window_id"]="$window_layout"
         if [[ "$window_active" == "1" ]]; then

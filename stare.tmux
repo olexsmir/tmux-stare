@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-set -x
 
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$CURRENT_DIR/scripts/helpers.sh"
@@ -21,14 +20,10 @@ main() {
   [[ -n "$save_key" ]] && tmux bind-key "$save_key" run-shell "$CURRENT_DIR/scripts/_save.sh"
 
   local start_action="$(get_opt_start)"
-  if [[ "$(get_opt_initialized)" == "0" ]]; then
-    if [[ "$start_action" == "last" ]]; then
-      tmux run-shell -b "sleep 0.1 && '$CURRENT_DIR/scripts/_restore.sh'"
-    elif [[ "$start_action" == "pick" ]]; then
-      tmux run-shell -b "sleep 0.1 && '$CURRENT_DIR/scripts/_pick.sh'"
-    fi
-
-    set_opt_initialized "1"
+  if [[ "$start_action" == "last" ]]; then
+    tmux run-shell -b "sleep 0.1 && '$CURRENT_DIR/scripts/_restore.sh'"
+  elif [[ "$start_action" == "pick" ]]; then
+    tmux run-shell -b "sleep 0.1 && '$CURRENT_DIR/scripts/_pick.sh'"
   fi
 
   add_save_interpolation

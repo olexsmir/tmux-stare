@@ -47,14 +47,18 @@ save_windows() {
   local session_name="$1"
   local save_file="$2"
   local format="window$S#{window_index}$S#{window_name}$S#{window_layout}$S#{window_active}"
-  tmux list-windows -t "$session_name" -F "$format" >>"$save_file"
-
+  tmux list-windows -t "$session_name" -F "$format" | while IFS="$S" read -r line; do
+    IFS="$S" read -r _ window_index _ _ _ <<<"$line"
+    local auto_rename
+    auto_rename="$(tmux show-window-options -v -t "$session_name:$window_index" automatic-rename 2>/dev/null)"
+    printf "%s%s%s\n" "$line" "$S" "${auto_rename:-on}"
+  done >>"$save_file"
 }
 
 format_process_command() {
   local pid="$1"
   [[ -r "/proc/${pid}/cmdline" ]] || return 1
-  xargs -0 bash -c 'printf "%q " "$0" "$@"' <"/proc/${pid}/cmdline" 2>/dev/null | sed 's/[[:space:]]*$//'
+  xargs -0 bash -c 'printf "%q " "$0"; for a; do [[ -n "$a" ]] && printf "%q " "$a"; done' <"/proc/${pid}/cmdline" 2>/dev/null | sed 's/[[:space:]]*$//'
 }
 
 get_descendant_pids() {
@@ -126,6 +130,25 @@ select_active_command_pid() {
   fi
 }
 
+_fd_is_pipe() {
+  [[ "$(readlink -f "/proc/${1}/fd/${2}" 2>/dev/null)" == pipe:* ]]
+}
+
+_order_pipeline() {
+  local first="" middle="" last=""
+  local pid
+  for pid; do
+    if ! _fd_is_pipe "$pid" 0 && _fd_is_pipe "$pid" 1; then
+      first+=" $pid"
+    elif _fd_is_pipe "$pid" 0 && ! _fd_is_pipe "$pid" 1; then
+      last+=" $pid"
+    else
+      middle+=" $pid"
+    fi
+  done
+  printf "%s %s %s" "$first" "$middle" "$last"
+}
+
 capture_running_command() {
   local pane_pid="$1"
   local pane_target="$2"
@@ -133,7 +156,42 @@ capture_running_command() {
 
   command_pid="$(select_active_command_pid "$pane_pid" "$pane_target")"
   [[ -n "$command_pid" ]] || return 1
-  format_process_command "$command_pid"
+
+  local pgid
+  pgid="$(ps -o pgid= -p "$command_pid" 2>/dev/null | tr -d ' ')"
+
+  if [[ -z "$pgid" ]]; then
+    format_process_command "$command_pid"
+    return
+  fi
+
+  local pipeline_pids=""
+  local pid pid_pgid
+  for pid in $(get_descendant_pids "$pane_pid"); do
+    pid_pgid="$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' ')"
+    [[ "$pid_pgid" == "$pgid" ]] || continue
+    pipeline_pids+=" $pid"
+  done
+
+  pipeline_pids="${pipeline_pids# }"
+
+  local commands=""
+  local cmd
+  # shellcheck disable=SC2086
+  set -- $pipeline_pids
+  for pid in $(_order_pipeline "$@"); do
+    [[ -z "$pid" ]] && continue
+    cmd="$(format_process_command "$pid")" || continue
+    [[ -n "$cmd" ]] || continue
+    [[ -n "$commands" ]] && commands+=" | "
+    commands+="$cmd"
+  done
+
+  if [[ -n "$commands" ]]; then
+    printf "%s" "$commands"
+  else
+    format_process_command "$command_pid"
+  fi
 }
 
 save_panes() {
@@ -276,10 +334,16 @@ restore_session_from_file() {
   while read -r line; do
     case $line in
       window*)
-        IFS=$S read -r _ window_index window_name window_layout window_active <<<"$line"
+        IFS=$S read -r _ window_index window_name window_layout window_active auto_rename <<<"$line"
+        [[ -z "$auto_rename" ]] && auto_rename="on"
         window_id="$session_name:$window_index"
         tmux new-window -k -t "$window_id" -n "$window_name"
-        tmux set-window-option -t "$window_id" automatic-rename on
+        if [[ "$auto_rename" == "off" ]]; then
+          tmux set-window-option -t "$window_id" automatic-rename off
+          tmux rename-window -t "$window_id" "$window_name"
+        else
+          tmux set-window-option -t "$window_id" automatic-rename on
+        fi
         [[ "$window_index" == "$initial_window_index" ]] && initial_window_restored=true
         window_layouts["$window_id"]="$window_layout"
         if [[ "$window_active" == "1" ]]; then

@@ -39,14 +39,13 @@ get_opt_dir() {
   echo "$dir"
 }
 
-# === spiner
-# TODO: use one of those briael fonts
+# === spinner
 new_spinner() {
   local current=0
-  local -r chars="/-\|"
+  local -r chars="⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
   while true; do
     tmux display-message -- "${chars:$current:1} $1"
-    current=$(((current + 1) % 4))
+    current=$(((current + 1) % 10))
     sleep 0.1
   done
 }
@@ -58,5 +57,5 @@ start_spinner() {
 
 stop_spinner() {
   kill "$SPINNER_PID"
-  tmux display-message " $1"
+  tmux display-message "  $1"
 }

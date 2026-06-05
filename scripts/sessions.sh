@@ -242,7 +242,8 @@ save_session() {
 }
 
 save_all_sessions() {
-  tmux list-sessions -F "#{session_name}" | while read -r session; do
+  tmux list-sessions -F "#{session_name} #{status}" | while read -r session status_val; do
+  [[ "$status_val" == "off" ]] && continue
   save_session "$session"
 done
 

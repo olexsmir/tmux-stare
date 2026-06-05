@@ -14,9 +14,10 @@ get_all_sessions() {
     seen["$name"]="stored"
   done
 
-  while IFS= read -r session; do
+  while IFS=' ' read -r session status_val; do
+    [[ "$status_val" == "off" ]] && continue
     seen["$session"]="loaded"
-  done < <(tmux list-sessions -F "#{session_name}")
+  done < <(tmux list-sessions -F "#{session_name} #{status}")
 
   for name in "${!seen[@]}"; do
     [[ "${seen[$name]}" == "loaded" ]] || continue

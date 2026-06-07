@@ -27,5 +27,8 @@ main() {
   fi
 
   add_save_interpolation
+
+  update_session_map
+  tmux set-hook -g session-renamed "run-shell '$CURRENT_DIR/scripts/_rename_hook.sh #{session_id} #{session_name}'"
 }
 main

@@ -251,6 +251,8 @@ local current_session="$(get_current_session_name)"
 if [[ -n "$current_session" ]]; then
   link_last "$(get_opt_dir)/${current_session}_last" "$(get_opt_dir)"
 fi
+
+update_session_map
 }
 
 unload_session() {

@@ -39,6 +39,11 @@ get_opt_dir() {
   echo "$dir"
 }
 
+update_session_map() {
+  local map_file="$(get_opt_dir)/.session_map"
+  tmux list-sessions -F "#{session_id}\t#{session_name}" 2>/dev/null >"$map_file"
+}
+
 # === spinner
 new_spinner() {
   local current=0

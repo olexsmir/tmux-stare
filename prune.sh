@@ -29,7 +29,7 @@ for f in *_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-
   if [[ -v ACTIVE["$name"] ]]; then
     # Active session: keep the _last target always, prune old others
     target="$(readlink "$name"_last 2>/dev/null || true)"
-    if [ "$f" = "$target" ]; then continue; fi  # always keep the _last target
+    if [ "$f" = "$target" ]; then continue; fi # always keep the _last target
     if [[ "$ts" < "$CUTOFF" ]]; then
       rm "$f"
       echo "pruned: $f"

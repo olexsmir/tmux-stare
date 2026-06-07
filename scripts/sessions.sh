@@ -205,7 +205,7 @@ save_panes() {
       awk -v command="$command" \
         'BEGIN {FS=OFS="\t"} {$6=command; NF=6; print}' \
         <<<"$line" >>"$save_file"
-      done
+    done
 }
 
 link_session_last() {
@@ -239,17 +239,17 @@ save_session() {
 
 save_all_sessions() {
   tmux list-sessions -F "#{session_name} #{status}" | while read -r session status_val; do
-  [[ "$status_val" == "off" ]] && continue
-  ignored_session "$session" && continue
-  save_session "$session"
-done
+    [[ "$status_val" == "off" ]] && continue
+    ignored_session "$session" && continue
+    save_session "$session"
+  done
 
-local current_session="$(get_current_session_name)"
-if [[ -n "$current_session" ]]; then
-  link_last "$(get_opt_dir)/${current_session}_last" "$(get_opt_dir)"
-fi
+  local current_session="$(get_current_session_name)"
+  if [[ -n "$current_session" ]]; then
+    link_last "$(get_opt_dir)/${current_session}_last" "$(get_opt_dir)"
+  fi
 
-update_session_map
+  update_session_map
 }
 
 unload_session() {
@@ -333,38 +333,38 @@ restore_session_from_file() {
   declare active_window
   while read -r line; do
     case $line in
-      window*)
-        IFS=$S read -r _ window_index window_name window_layout window_active auto_rename <<<"$line"
-        [[ -z "$auto_rename" ]] && auto_rename="on"
-        window_id="$session_name:$window_index"
-        tmux new-window -k -t "$window_id" -n "$window_name"
-        if [[ "$auto_rename" == "off" ]]; then
-          tmux set-window-option -t "$window_id" automatic-rename off
-          tmux rename-window -t "$window_id" "$window_name"
-        else
-          tmux set-window-option -t "$window_id" automatic-rename on
-        fi
-        [[ "$window_index" == "$initial_window_index" ]] && initial_window_restored=true
-        window_layouts["$window_id"]="$window_layout"
-        if [[ "$window_active" == "1" ]]; then
-          active_window="$window_id"
-        fi
-        ;;
+    window*)
+      IFS=$S read -r _ window_index window_name window_layout window_active auto_rename <<<"$line"
+      [[ -z "$auto_rename" ]] && auto_rename="on"
+      window_id="$session_name:$window_index"
+      tmux new-window -k -t "$window_id" -n "$window_name"
+      if [[ "$auto_rename" == "off" ]]; then
+        tmux set-window-option -t "$window_id" automatic-rename off
+        tmux rename-window -t "$window_id" "$window_name"
+      else
+        tmux set-window-option -t "$window_id" automatic-rename on
+      fi
+      [[ "$window_index" == "$initial_window_index" ]] && initial_window_restored=true
+      window_layouts["$window_id"]="$window_layout"
+      if [[ "$window_active" == "1" ]]; then
+        active_window="$window_id"
+      fi
+      ;;
 
-      pane*)
-        IFS=$S read -r _ pane_index pane_current_path pane_active window_index command <<<"$line"
-        if [[ "$pane_index" == "$(get_tmux_option base-index 0)" ]]; then
-          tmux send-keys -t "$session_name:$window_index" "cd \"$pane_current_path\"" Enter "clear" Enter
-        else
-          tmux split-window -d -t "$session_name:$window_index" -c "$pane_current_path"
-        fi
-        if [[ "$pane_active" == "1" ]]; then
-          tmux select-pane -t "$session_name:$window_index.$pane_index"
-        fi
-        if should_restore_command "$command"; then
-          tmux send-keys -t "$session_name:$window_index.$pane_index" "$command" Enter
-        fi
-        ;;
+    pane*)
+      IFS=$S read -r _ pane_index pane_current_path pane_active window_index command <<<"$line"
+      if [[ "$pane_index" == "$(get_tmux_option base-index 0)" ]]; then
+        tmux send-keys -t "$session_name:$window_index" "cd \"$pane_current_path\"" Enter "clear" Enter
+      else
+        tmux split-window -d -t "$session_name:$window_index" -c "$pane_current_path"
+      fi
+      if [[ "$pane_active" == "1" ]]; then
+        tmux select-pane -t "$session_name:$window_index.$pane_index"
+      fi
+      if should_restore_command "$command"; then
+        tmux send-keys -t "$session_name:$window_index.$pane_index" "$command" Enter
+      fi
+      ;;
     esac
   done
 

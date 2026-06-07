@@ -38,7 +38,7 @@ get_opt_ignore() { get_tmux_option "@stare-ignore" "0"; }
 ignored_session() {
   local name="$1"
   local ignores
-  IFS=' ' read -ra ignores <<< "$(get_opt_ignore)"
+  IFS=' ' read -ra ignores <<<"$(get_opt_ignore)"
   local i
   for i in "${ignores[@]}"; do
     [[ "$name" == "$i" ]] && return 0

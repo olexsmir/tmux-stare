@@ -44,6 +44,10 @@ OPTIONS
     # Default: '$HOME/.local/share/tmux/stare/'
     set -g @stare-dir '$HOME/.local/share/tmux/stare/'
 
+    # Sessions to ignore when saving. Space-separated list.
+    # Default: '0'
+    set -g @stare-ignore '0 mytemp'
+
     # Space-separated list of processes allowed to be resurrected.
     # - set to 'false' to disable command resurrection
     # - set to ':all:' to resurrect everything

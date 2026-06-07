@@ -33,6 +33,18 @@ set_opt_last() { set_tmux_option "@stare-last" "$1"; }
 get_opt_save() { get_tmux_option "@stare-save" "C-s"; }
 get_opt_pick() { get_tmux_option "@stare-pick" ""; }
 get_opt_processes() { get_tmux_option "@stare-processes" "vi vim nvim man less more tial htop btop claude opencode copilot pi"; }
+get_opt_ignore() { get_tmux_option "@stare-ignore" "0"; }
+
+ignored_session() {
+  local name="$1"
+  local ignores
+  IFS=' ' read -ra ignores <<< "$(get_opt_ignore)"
+  local i
+  for i in "${ignores[@]}"; do
+    [[ "$name" == "$i" ]] && return 0
+  done
+  return 1
+}
 get_opt_dir() {
   local dir="$(get_tmux_option "@stare-dir" "${HOME}/.local/share/tmux/stare" | sed "s,\$HOME,$HOME,g; s,\~,$HOME,g")"
   mkdir -p "$dir"

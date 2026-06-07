@@ -42,7 +42,7 @@ save_cwd() {
 save_windows() {
   local session_name="$1"
   local save_file="$2"
-  local format="window$S#{window_index}$S#{window_name}$S#{window_layout}$S#{window_active}$S#{?automatic-rename,on,off}"
+  local format="window$S#{window_index}$S#{window_name}$S#{window_layout}$S#{window_active}$S#{?automatic-rename,on,off}$S#{window_active_pane_index}"
   tmux list-windows -t "$session_name" -F "$format" >>"$save_file"
 }
 
@@ -195,15 +195,15 @@ capture_running_command() {
 save_panes() {
   local session_name="$1"
   local save_file="$2"
-  local format="pane$S#{pane_index}$S#{pane_current_path}$S#{pane_active}$S#{window_index}$S#{pane_pid}$S#{pane_current_command}"
+  local format="pane$S#{pane_index}$S#{pane_current_path}$S#{pane_active}$S#{window_index}$S#{pane_pid}$S#{pane_current_command}$S#{pane_marked}"
   tmux list-panes -s -t "$session_name" -F "$format" |
     while IFS="$S" read -r line; do
       local command
-      IFS="$S" read -r _ _ _ _ _ pane_pid pane_current_command <<<"$line"
+      IFS="$S" read -r _ _ _ _ _ pane_pid pane_current_command pane_marked <<<"$line"
       command="$(capture_running_command "$pane_pid" "$pane_current_command")"
 
-      awk -v command="$command" \
-        'BEGIN {FS=OFS="\t"} {$6=command; NF=6; print}' \
+      awk -v command="$command" -v marked="$pane_marked" \
+        'BEGIN {FS=OFS="\t"} {$6=command; $7=marked; NF=7; print}' \
         <<<"$line" >>"$save_file"
     done
 }
@@ -330,11 +330,13 @@ restore_session_from_file() {
   local initial_window_restored=false
 
   declare -A window_layouts
+  declare -A window_active_panes
   declare active_window
+  declare marked_pane
   while read -r line; do
     case $line in
     window*)
-      IFS=$S read -r _ window_index window_name window_layout window_active auto_rename <<<"$line"
+      IFS=$S read -r _ window_index window_name window_layout window_active auto_rename window_active_pane_index <<<"$line"
       [[ -z "$auto_rename" ]] && auto_rename="on"
       window_id="$session_name:$window_index"
       tmux new-window -k -t "$window_id" -n "$window_name"
@@ -349,10 +351,13 @@ restore_session_from_file() {
       if [[ "$window_active" == "1" ]]; then
         active_window="$window_id"
       fi
+      if [[ -n "$window_active_pane_index" ]]; then
+        window_active_panes["$window_id"]="$window_active_pane_index"
+      fi
       ;;
 
     pane*)
-      IFS=$S read -r _ pane_index pane_current_path pane_active window_index command <<<"$line"
+      IFS=$S read -r _ pane_index pane_current_path pane_active window_index command pane_marked <<<"$line"
       if [[ "$pane_index" == "$(get_tmux_option base-index 0)" ]]; then
         tmux send-keys -t "$session_name:$window_index" "cd \"$pane_current_path\"" Enter "clear" Enter
       else
@@ -360,6 +365,9 @@ restore_session_from_file() {
       fi
       if [[ "$pane_active" == "1" ]]; then
         tmux select-pane -t "$session_name:$window_index.$pane_index"
+      fi
+      if [[ "$pane_marked" == "1" ]]; then
+        marked_pane="$session_name:$window_index.$pane_index"
       fi
       if should_restore_command "$command"; then
         tmux send-keys -t "$session_name:$window_index.$pane_index" "$command" Enter
@@ -373,6 +381,14 @@ restore_session_from_file() {
   for window in "${!window_layouts[@]}"; do
     tmux select-layout -t "$window" "${window_layouts[$window]}"
   done
+
+  for window in "${!window_active_panes[@]}"; do
+    tmux select-pane -t "$window.${window_active_panes[$window]}"
+  done
+
+  if [[ -n "$marked_pane" ]]; then
+    tmux select-pane -m -t "$marked_pane"
+  fi
 
   tmux select-window -t "$active_window"
   tmux switch-client -t "$session_name"

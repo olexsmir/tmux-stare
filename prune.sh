@@ -3,13 +3,17 @@ CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$CURRENT_DIR/scripts/helpers.sh"
 
 set -euo pipefail
+cd "$(get_opt_dir)"
 
 DAYS=7
 
-DIR="$(get_opt_dir)"
-cd "$DIR"
-
 CUTOFF=$(date -d "$DAYS days ago" +%Y%m%dT%H%M%S)
+
+
+RED='\033[0;31m'
+MAGENTA='\033[0;35m'
+YELLOW='\033[0;33m'
+RESET='\033[0m'
 
 # Build set of active session names (those with a _last symlink)
 declare -A ACTIVE
@@ -19,6 +23,7 @@ for l in *_last; do
 done
 
 DELETED=0
+ORPHANS=0
 FIXED=0
 
 for f in *_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]; do
@@ -32,14 +37,15 @@ for f in *_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-
     if [ "$f" = "$target" ]; then continue; fi # always keep the _last target
     if [[ "$ts" < "$CUTOFF" ]]; then
       rm "$f"
-      echo "pruned: $f"
+      echo -e "${RED}pruned:${RESET} $f"
       DELETED=$((DELETED + 1))
     fi
   else
     # Orphaned session: delete everything
     rm "$f"
-    echo "pruned (orphan): $f"
+    echo -e "${MAGENTA}pruned (orphan):${RESET} $f"
     DELETED=$((DELETED + 1))
+    ORPHANS=$((ORPHANS + 1))
   fi
 done
 
@@ -48,15 +54,15 @@ for l in *_last; do
   [ -L "$l" ] || continue
   [ -e "$l" ] && continue
   rm "$l"
-  echo "cleaned: $l (broken symlink)"
+  echo -e "${YELLOW}cleaned:${RESET} $l (broken symlink)"
   FIXED=$((FIXED + 1))
 done
 
 # Clean dangling global last symlink
 if [ -L "last" ] && [ ! -e "last" ]; then
   rm "last"
-  echo "cleaned: last (broken symlink)"
+  echo -e "${YELLOW}cleaned:${RESET} last (broken symlink)"
   FIXED=$((FIXED + 1))
 fi
 
-echo "Done. $DELETED session files pruned, $FIXED broken symlinks cleaned."
+echo "Done. $DELETED session files pruned, $ORPHANS orphan sessions deleted, $FIXED broken symlinks cleaned."

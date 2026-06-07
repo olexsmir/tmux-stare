@@ -6,11 +6,7 @@ declare S=$'\t'
 
 # === common
 get_current_session_name() {
-  if [ "$(tmux display-message -p "#{session_grouped}")" = 0 ]; then
-    tmux display-message -p "#{session_name}" 2>/dev/null || true
-  else
-    tmux display-message -p "#{session_group}" 2>/dev/null || true
-  fi
+  tmux display-message -p -F '#{?#{session_grouped},#{session_group},#{session_name}}'
 }
 
 rename_session() {
@@ -46,13 +42,8 @@ save_cwd() {
 save_windows() {
   local session_name="$1"
   local save_file="$2"
-  local format="window$S#{window_index}$S#{window_name}$S#{window_layout}$S#{window_active}"
-  tmux list-windows -t "$session_name" -F "$format" | while IFS="$S" read -r line; do
-    IFS="$S" read -r _ window_index _ _ _ <<<"$line"
-    local auto_rename
-    auto_rename="$(tmux show-window-options -v -t "$session_name:$window_index" automatic-rename 2>/dev/null)"
-    printf "%s%s%s\n" "$line" "$S" "${auto_rename:-on}"
-  done >>"$save_file"
+  local format="window$S#{window_index}$S#{window_name}$S#{window_layout}$S#{window_active}$S#{?automatic-rename,on,off}"
+  tmux list-windows -t "$session_name" -F "$format" >>"$save_file"
 }
 
 format_process_command() {
@@ -103,8 +94,7 @@ get_process_name() {
 
 select_active_command_pid() {
   local pane_pid="$1"
-  local pane_target="$2"
-  local pane_current_command
+  local pane_current_command="$2"
   local pids
   local pid
   local name
@@ -112,7 +102,6 @@ select_active_command_pid() {
   local fallback_pid=""
   local descendant_count=0
 
-  pane_current_command="$(tmux display-message -p -t "$pane_target" "#{pane_current_command}" 2>/dev/null)"
   pids="$(get_descendant_pids "$pane_pid")"
 
   for pid in $pids; do
@@ -151,10 +140,10 @@ _order_pipeline() {
 
 capture_running_command() {
   local pane_pid="$1"
-  local pane_target="$2"
+  local pane_current_command="$2"
   local command_pid
 
-  command_pid="$(select_active_command_pid "$pane_pid" "$pane_target")"
+  command_pid="$(select_active_command_pid "$pane_pid" "$pane_current_command")"
   [[ -n "$command_pid" ]] || return 1
 
   local pgid
@@ -165,11 +154,20 @@ capture_running_command() {
     return
   fi
 
+  local descendants
+  descendants="$(get_descendant_pids "$pane_pid")"
+
+  local -A pid_pgid
+  if [[ -n "$descendants" ]]; then
+    while read -r p pg; do
+      [[ -n "$p" ]] && pid_pgid["$p"]="$pg"
+    done < <(ps -o pid=,pgid= -p $(echo "$descendants" | tr '\n' ' ') 2>/dev/null)
+  fi
+
   local pipeline_pids=""
-  local pid pid_pgid
-  for pid in $(get_descendant_pids "$pane_pid"); do
-    pid_pgid="$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' ')"
-    [[ "$pid_pgid" == "$pgid" ]] || continue
+  local pid
+  for pid in $descendants; do
+    [[ "${pid_pgid[$pid]:-}" == "$pgid" ]] || continue
     pipeline_pids+=" $pid"
   done
 
@@ -197,17 +195,15 @@ capture_running_command() {
 save_panes() {
   local session_name="$1"
   local save_file="$2"
-  local format="pane$S#{pane_index}$S#{pane_current_path}$S#{pane_active}$S#{window_index}$S#{pane_pid}"
+  local format="pane$S#{pane_index}$S#{pane_current_path}$S#{pane_active}$S#{window_index}$S#{pane_pid}$S#{pane_current_command}"
   tmux list-panes -s -t "$session_name" -F "$format" |
     while IFS="$S" read -r line; do
-      local pane_target
       local command
-      IFS="$S" read -r _ pane_index _ _ window_index pane_pid <<<"$line"
-      pane_target="${session_name}:${window_index}.${pane_index}"
-      command="$(capture_running_command "$pane_pid" "$pane_target")"
+      IFS="$S" read -r _ _ _ _ _ pane_pid pane_current_command <<<"$line"
+      command="$(capture_running_command "$pane_pid" "$pane_current_command")"
 
       awk -v command="$command" \
-        'BEGIN {FS=OFS="\t"} {$6=command; print}' \
+        'BEGIN {FS=OFS="\t"} {$6=command; NF=6; print}' \
         <<<"$line" >>"$save_file"
       done
 }

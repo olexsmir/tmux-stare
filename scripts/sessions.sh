@@ -68,7 +68,7 @@ get_descendant_pids() {
     local ppid
     local pid
 
-    while read -r ppid pid; do
+    while read -r ppid pid sid; do
       ppid="${ppid// /}"
       pid="${pid// /}"
       sid="${sid// /}"
@@ -113,7 +113,9 @@ select_active_command_pid() {
     fallback_pid="$pid"
     [[ -n "$pane_current_command" ]] || continue
     name="$(get_process_name "$pid")" || continue
-    [[ "$name" == "$pane_current_command" ]] && matching_pid="$pid"
+    [[ "$name" == "$pane_current_command" ]] || continue
+    matching_pid="$pid"
+    break
   done
 
   if [[ -n "$matching_pid" ]]; then

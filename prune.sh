@@ -33,19 +33,21 @@ for f in *_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-
 
   if [[ -v ACTIVE["$name"] ]]; then
     # Active session: keep the _last target always, prune old others
-    target="$(readlink "$name"_last 2>/dev/null || true)"
-    if [ "$f" = "$target" ]; then continue; fi # always keep the _last target
+    target="$(readlink "${name}_last" 2>/dev/null || true)"
+    # readlink returns an absolute path; compare basenames only
+    if [ "$f" = "${target##*/}" ]; then continue; fi
     if [[ "$ts" < "$CUTOFF" ]]; then
       rm "$f"
       echo -e "${RED}pruned:${RESET} $f"
       DELETED=$((DELETED + 1))
     fi
   else
-    # Orphaned session: delete everything
-    rm "$f"
-    echo -e "${MAGENTA}pruned (orphan):${RESET} $f"
-    DELETED=$((DELETED + 1))
-    ORPHANS=$((ORPHANS + 1))
+    if [[ "$ts" < "$CUTOFF" ]]; then
+      rm "$f"
+      echo -e "${MAGENTA}pruned (orphan):${RESET} $f"
+      DELETED=$((DELETED + 1))
+      ORPHANS=$((ORPHANS + 1))
+    fi
   fi
 done
 

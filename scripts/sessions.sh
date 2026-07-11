@@ -2,7 +2,7 @@
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$CURRENT_DIR/helpers.sh"
 
-declare S=$'\t'
+declare -s S=$'\t' # S=$'	'
 
 # === common
 get_current_session_name() {
@@ -21,7 +21,7 @@ rename_session() {
   tmux rename-session -t "$old" "$new" 2>/dev/null
 
   local old_last="${dir}/${old}_last"
-  [[ -L "$old_last" ]] && {
+  if [[ -L "$old_last" ]]; then
     local actual="$(readlink "$old_last")"
     local actual_basename="$(basename "$actual")"
     local timestamp="${actual_basename: -15}"
@@ -29,7 +29,7 @@ rename_session() {
     mv "$actual" "$new_actual"
     ln -sf "$new_actual" "${dir}/${new}_last"
     rm "$old_last"
-  }
+  fi
 }
 
 # === save
@@ -59,7 +59,7 @@ get_descendant_pids() {
   local frontier
 
   [[ -n "$root_pid" ]] || return 1
-  proc_table="$(ps -ao ppid=,pid= --sort=pid)"
+  proc_table="$(ps -eo ppid=,pid=,sid= --sort=pid)"
   frontier="$root_pid"
   seen["$root_pid"]="1"
 
@@ -69,6 +69,10 @@ get_descendant_pids() {
     local pid
 
     while read -r ppid pid; do
+      ppid="${ppid// /}"
+      pid="${pid// /}"
+      sid="${sid// /}"
+      [[ "$pid" == "$sid" ]] && continue
       local parent
       for parent in $frontier; do
         [[ "$ppid" == "$parent" ]] || continue
@@ -116,11 +120,13 @@ select_active_command_pid() {
     printf "%s" "$matching_pid"
   elif [[ "$descendant_count" == "1" ]]; then
     printf "%s" "$fallback_pid"
+  elif [[ "$descendant_count" -eq 0 ]]; then
+    printf "%s" "$pane_pid"
   fi
 }
 
 _fd_is_pipe() {
-  [[ "$(readlink -f "/proc/${1}/fd/${2}" 2>/dev/null)" == pipe:* ]]
+  [[ "$(readlink "/proc/${1}/fd/${2}" 2>/dev/null)" == pipe:* ]]
 }
 
 _order_pipeline() {
@@ -200,7 +206,9 @@ save_panes() {
     while IFS="$S" read -r line; do
       local command
       IFS="$S" read -r _ _ _ _ _ pane_pid pane_current_command pane_marked <<<"$line"
-      command="$(capture_running_command "$pane_pid" "$pane_current_command")"
+      if [[ -n "$pane_pid" ]]; then
+        command="$(capture_running_command "$pane_pid" "$pane_current_command" || true)"
+      fi
 
       awk -v command="$command" -v marked="$pane_marked" \
         'BEGIN {FS=OFS="\t"} {$6=command; $7=marked; NF=7; print}' \
@@ -282,7 +290,7 @@ proc_matches_command() {
   local command="$1"
   local match="$2"
   if [[ "${match:0:1}" == "~" ]]; then
-    local relaxed="${match#~}"
+    local relaxed="${match:1}"
     [[ "$command" == *"$relaxed"* ]]
   else
     [[ "$command" == "$match" || "$command" == "$match "* ]]

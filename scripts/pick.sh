@@ -31,6 +31,7 @@ get_all_sessions() {
   for name in "${!seen[@]}"; do
     [[ "${seen[$name]}" == "stored" ]] && printf "○ %s\n" "$name"
   done
+  return 0
 }
 
 strip_session_name() {

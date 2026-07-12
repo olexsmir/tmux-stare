@@ -2,11 +2,31 @@
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$CURRENT_DIR/helpers.sh"
 
-declare -s S=$'\t' # S=$'	'
+S=$'\t'
 
 # === common
 get_current_session_name() {
   tmux display-message -p -F '#{?#{session_grouped},#{session_group},#{session_name}}'
+}
+
+get_session_id() {
+  local name="$1"
+  tmux list-sessions -F '#{session_id} #{session_name}' 2>/dev/null | \
+    awk -v name="$name" '{
+      sid = $1
+      sub(/^[^ ]* /, "")  # remove session_id column
+      rest = $0
+      if (rest == name) {
+        print sid
+        exit
+      }
+    }'
+}
+
+session_exists() {
+  local name="$1"
+  local sid=$(get_session_id "$name")
+  [[ -n "$sid" ]]
 }
 
 rename_session() {
@@ -17,8 +37,14 @@ rename_session() {
   [[ -z "$old" || -z "$new" || "$old" == "$new" ]] && return 1
   [[ -e "$(get_opt_dir)/${new}_last" ]] && return 1
 
-  tmux has-session -t "$new" 2>/dev/null && return 1
-  tmux rename-session -t "$old" "$new" 2>/dev/null
+  # use session ID for robust lookup (dots break -t)
+  local sid=$(get_session_id "$new")
+  [[ -n "$sid" ]] && return 1
+
+  # resolve old session to ID for rename
+  local old_sid=$(get_session_id "$old")
+  [[ -z "$old_sid" ]] && return 1
+  tmux rename-session -t "$old_sid" "$new" 2>/dev/null
 
   local old_last="${dir}/${old}_last"
   if [[ -L "$old_last" ]]; then
@@ -401,14 +427,18 @@ restore_session_from_file() {
   fi
 
   tmux select-window -t "$active_window"
-  tmux switch-client -t "$session_name"
+  local sid=$(get_session_id "$session_name")
+  if [[ -n "$sid" ]]; then
+    tmux switch-client -t "$sid"
+  fi
   stop_spinner "Session restored"
 }
 
 restore_session() {
   local session_name="$1"
-  if tmux has-session -t "$session_name" 2>/dev/null; then
-    tmux switch-client -t "$session_name"
+  local sid=$(get_session_id "$session_name")
+  if [[ -n "$sid" ]]; then
+    tmux switch-client -t "$sid"
     return 0
   fi
 

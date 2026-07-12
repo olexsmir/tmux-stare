@@ -34,6 +34,16 @@ get_all_sessions() {
   return 0
 }
 
+sanitize_session_name() {
+  local name="$1"
+  # trim leading/trailing whitespace
+  read -r name <<< "$name"
+  # replace chars that break tmux -t target parsing
+  name="${name//./_}"
+  name="${name//:/_}"
+  echo "$name"
+}
+
 strip_session_name() {
   local name="${1#● }"
   name="${name#○ }"
@@ -51,8 +61,9 @@ pick() {
   [[ -z "$selected" ]] && return 0
 
   local session_name="$(strip_session_name "$selected")"
-  if tmux has-session -t "$session_name" 2>/dev/null; then
-    tmux switch-client -t "$session_name"
+  local sid=$(get_session_id "$session_name")
+  if [[ -n "$sid" ]]; then
+    tmux switch-client -t "$sid"
   else
     restore_session "$session_name"
   fi
@@ -60,9 +71,10 @@ pick() {
 
 unload_or_kill() {
   local session_name="$(strip_session_name "$1")"
-  if tmux has-session -t "$session_name" 2>/dev/null; then
+  local sid=$(get_session_id "$session_name")
+  if [[ -n "$sid" ]]; then
     save_session "$session_name"
-    tmux kill-session -t "$session_name"
+    tmux kill-session -t "$sid"
   else
     confirm_delete "$session_name"
   fi
@@ -82,21 +94,31 @@ confirm_delete() {
 
 rename() {
   local old_name="$(strip_session_name "$1")"
-  local new_name=$(printf "" | fzf --prompt="Rename ""$old_name"" to " --print-query)
+  local new_raw=$(printf "" | fzf --prompt="Rename ""$old_name"" to " --print-query)
+  [[ -z "$new_raw" ]] && return 1
+  local new_name="$(sanitize_session_name "$new_raw")"
   [[ -z "$new_name" ]] && return 1
   rename_session "$old_name" "$new_name"
 }
 
 new_session() {
-  local name=$(printf "" | fzf --prompt="New session name: " --print-query)
+  local raw_name=$(printf "" | fzf --prompt="New session name: " --print-query)
+  [[ -z "$raw_name" ]] && return 1
+
+  local name="$(sanitize_session_name "$raw_name")"
   [[ -z "$name" ]] && return 1
 
-  if tmux has-session -t "$name" 2>/dev/null; then
-    tmux switch-client -t "$name"
+  local sid=$(get_session_id "$name")
+  if [[ -n "$sid" ]]; then
+    tmux switch-client -t "$sid"
   else
     local cwd="$(tmux display-message -p "#{pane_current_path}")"
     tmux new-session -ds "$name" -c "$cwd"
-    tmux switch-client -t "$name"
+    # Use sid because $name may still contain chars that break -t
+    sid=$(get_session_id "$name")
+    if [[ -n "$sid" ]]; then
+      tmux switch-client -t "$sid"
+    fi
   fi
 }
 
